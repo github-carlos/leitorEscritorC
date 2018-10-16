@@ -16,6 +16,9 @@ void deletarMemoriaCompartilhada(int shmid, void *memoria_compartilhada);
 void inicializarSemaforoEscritor(struct shared_memo *bufferCompartilhado);
 void inicializarSemaforoLeitor(struct shared_memo *bufferCompartilhado);
 
+int semaphore_p(int sem_id);
+int semaphore_v(int sem_id);
+
 int set_semvalue(int sem_id);
 void del_semvalue(int sem_id);
 
@@ -98,6 +101,39 @@ void inicializarSemaforoLeitor(struct shared_memo *bufferCompartilhado) {
 		bufferCompartilhado->sem_id_reader = semget((key_t)888, 1, 0666 | IPC_CREAT);
 		set_semvalue(bufferCompartilhado->sem_id_reader);
 	}
+}
+
+/* semaphore_p changes the semaphore by -1 (waiting). */
+
+int semaphore_p(int sem_id)
+{
+    struct sembuf sem_b;
+    
+    sem_b.sem_num = 0;
+    sem_b.sem_op = -1; /* P() */
+    sem_b.sem_flg = SEM_UNDO;
+    if (semop(sem_id, &sem_b, 1) == -1) {
+        fprintf(stderr, "semaphore_p failed\n");
+        return(0);
+    }
+    return(1);
+}
+
+/* semaphore_v is similar except for setting the sem_op part of the sembuf structure to 1,
+ so that the semaphore becomes available. */
+
+int semaphore_v(int sem_id)
+{
+    struct sembuf sem_b;
+    
+    sem_b.sem_num = 0;
+    sem_b.sem_op = 1; /* V() */
+    sem_b.sem_flg = SEM_UNDO;
+    if (semop(sem_id, &sem_b, 1) == -1) {
+        fprintf(stderr, "semaphore_v failed\n");
+        return(0);
+    }
+    return(1);
 }
 
 int set_semvalue(int sem_id) {

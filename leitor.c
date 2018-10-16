@@ -6,6 +6,7 @@
 // biblioteca de memoria compartilhada
 #include <sys/shm.h>
 
+#include "semun.h"
 #include "estruturaCompartilhada.h"
 
 int criarMemoriaCompartilhada();
@@ -14,6 +15,10 @@ void *associarEspacoMemoAoProcesso(int shmid);
 void inicializarSemaforoEscritor(struct shared_memo *bufferCompartilhado);
 void inicializarSemaforoLeitor(struct shared_memo *bufferCompartilhado);
 
+
+int semaphore_p(int sem_id);
+int semaphore_v(int sem_id);
+
 int set_semvalue(int sem_id);
 void del_semvalue(int sem_id);
 
@@ -21,16 +26,19 @@ void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo*
 
 int main() {
 		
-		void *memoria_compartilhada = (void *)0;
+		void *memoriaCompartilhada = (void *)0;
 		struct shared_memo *bufferCompartilhado;
 		int shmid;
 		
 		shmid = criarMemoriaCompartilhada();
-		memoria_compartilhada = associarEspacoMemoAoProcesso(shmid);
+		memoriaCompartilhada = associarEspacoMemoAoProcesso(shmid);
 		
-		printf("Memory attached at %X\n", (int)memoria_compartilhada);
+		printf("Memory attached at %X\n", (int)memoriaCompartilhada);
 		
-		bufferCompartilhado = (struct shared_memo *) memoria_compartilhada;
+		bufferCompartilhado = (struct shared_memo *) memoriaCompartilhada;
+		
+		inicializarSemaforoEscritor(bufferCompartilhado);
+		inicializarSemaforoLeitor(bufferCompartilhado);
 		
 		printf("%s\n", bufferCompartilhado->texto);
 			if (bufferCompartilhado->sem_id_reader == NULL) {
@@ -39,6 +47,8 @@ int main() {
 		printf("não é nulo %i\n", bufferCompartilhado->sem_id_writer);
 		printf("não é nulo %i\n", bufferCompartilhado->sem_id_reader);
 	}
+	terminarPrograma(shmid, memoriaCompartilhada, bufferCompartilhado);
+	return 0;
 }
 
 // cria a memoria compartilhada e retorna o id
@@ -62,5 +72,87 @@ void *associarEspacoMemoAoProcesso(int shmid) {
       exit(EXIT_FAILURE);
     }
     return enderecoMemo;
+}
+
+// desassocia memoria compartilhada do processo e deleta
+void deletarMemoriaCompartilhada(int shmid, void *memoria_compartilhada) {
+	if (shmdt(memoria_compartilhada) == -1) {
+		fprintf(stderr, "shmdt failed\n");
+        exit(EXIT_FAILURE);
+    }
+    if (shmctl(shmid, IPC_RMID, 0) == -1) {
+        fprintf(stderr, "shmctl(IPC_RMID) failed\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void inicializarSemaforoEscritor(struct shared_memo *bufferCompartilhado) {
+	// cria semaforo e inicializa com 1 se já nao existir
+	if (!bufferCompartilhado->sem_id_writer) {
+		bufferCompartilhado->sem_id_writer = semget((key_t)777, 1, 0666 | IPC_CREAT);
+		set_semvalue(bufferCompartilhado->sem_id_writer);
+	}
+}
+
+void inicializarSemaforoLeitor(struct shared_memo *bufferCompartilhado) {
+	// cria semaforo e inicializa com 1 se já nao existir
+	if (!bufferCompartilhado->sem_id_reader) {
+		bufferCompartilhado->sem_id_reader = semget((key_t)888, 1, 0666 | IPC_CREAT);
+		set_semvalue(bufferCompartilhado->sem_id_reader);
+	}
+}
+
+/* semaphore_p changes the semaphore by -1 (waiting). */
+
+int semaphore_p(int sem_id)
+{
+    struct sembuf sem_b;
+    
+    sem_b.sem_num = 0;
+    sem_b.sem_op = -1; /* P() */
+    sem_b.sem_flg = SEM_UNDO;
+    if (semop(sem_id, &sem_b, 1) == -1) {
+        fprintf(stderr, "semaphore_p failed\n");
+        return(0);
+    }
+    return(1);
+}
+
+/* semaphore_v is similar except for setting the sem_op part of the sembuf structure to 1,
+ so that the semaphore becomes available. */
+
+int semaphore_v(int sem_id)
+{
+    struct sembuf sem_b;
+    
+    sem_b.sem_num = 0;
+    sem_b.sem_op = 1; /* V() */
+    sem_b.sem_flg = SEM_UNDO;
+    if (semop(sem_id, &sem_b, 1) == -1) {
+        fprintf(stderr, "semaphore_v failed\n");
+        return(0);
+    }
+    return(1);
+}
+
+int set_semvalue(int sem_id) {
+    union semun sem_union;
+
+    sem_union.val = 1;
+    if (semctl(sem_id, 0, SETVAL, sem_union) == -1) return(0);
+    return(1);
+}
+
+void del_semvalue(int sem_id) {
+    union semun sem_union;
+    
+    if (semctl(sem_id, 0, IPC_RMID, sem_union) == -1)
+        fprintf(stderr, "Failed to delete semaphore\n");
+}
+
+void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado) {
+	del_semvalue(bufferCompartilhado->sem_id_writer);
+	del_semvalue(bufferCompartilhado->sem_id_reader);
+	deletarMemoriaCompartilhada(shmid, memoriaCompartilhada);
 }
 
