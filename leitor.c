@@ -20,6 +20,7 @@ int semaphore_p(int sem_id);
 int semaphore_v(int sem_id);
 
 int set_semvalue(int sem_id);
+int get_semvalue(int sem_id);
 void del_semvalue(int sem_id);
 
 void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado);
@@ -40,13 +41,15 @@ int main() {
 		inicializarSemaforoEscritor(bufferCompartilhado);
 		inicializarSemaforoLeitor(bufferCompartilhado);
 		
-		printf("%s\n", bufferCompartilhado->texto);
-			if (bufferCompartilhado->sem_id_reader == NULL) {
-		printf("é nulo %i\n", bufferCompartilhado->sem_id_reader);
-	} else {
-		printf("não é nulo %i\n", bufferCompartilhado->sem_id_writer);
-		printf("não é nulo %i\n", bufferCompartilhado->sem_id_reader);
-	}
+		//while(1) {
+				// verifica se está havendo escrita
+				printf("%i\n", get_semvalue(bufferCompartilhado->sem_id_writer));
+				semaphore_p(bufferCompartilhado->sem_id_writer);
+				printf("%i\n", get_semvalue(bufferCompartilhado->sem_id_writer));
+				semaphore_v(bufferCompartilhado->sem_id_writer);
+				printf("%i\n", get_semvalue(bufferCompartilhado->sem_id_writer));
+				
+		//}
 	terminarPrograma(shmid, memoriaCompartilhada, bufferCompartilhado);
 	return 0;
 }
@@ -141,6 +144,13 @@ int set_semvalue(int sem_id) {
     sem_union.val = 1;
     if (semctl(sem_id, 0, SETVAL, sem_union) == -1) return(0);
     return(1);
+}
+
+int get_semvalue(int sem_id) {
+	union semun sem_union;
+	sem_union.array = malloc(4);
+	if (semctl(sem_id, 0, GETALL, sem_union) == -1) return (0);
+	return sem_union.array[0];
 }
 
 void del_semvalue(int sem_id) {

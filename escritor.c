@@ -20,6 +20,7 @@ int semaphore_p(int sem_id);
 int semaphore_v(int sem_id);
 
 int set_semvalue(int sem_id);
+int get_semvalue(int sem_id);
 void del_semvalue(int sem_id);
 
 void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado);
@@ -142,6 +143,13 @@ int set_semvalue(int sem_id) {
     sem_union.val = 1;
     if (semctl(sem_id, 0, SETVAL, sem_union) == -1) return(0);
     return(1);
+}
+
+int get_semvalue(int sem_id) {
+	union semun sem_union;
+	sem_union.array = malloc(4);
+	if (semctl(sem_id, 0, GETALL, sem_union) == -1) return (0);
+	return sem_union.array[0];
 }
 
 void del_semvalue(int sem_id) {
