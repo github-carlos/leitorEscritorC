@@ -19,7 +19,7 @@ void inicializarSemaforoLeitor(struct shared_memo *bufferCompartilhado);
 int semaphore_p(int sem_id);
 int semaphore_v(int sem_id);
 
-int set_semvalue(int sem_id);
+int set_semvalue(int sem_id, int somar);
 int get_semvalue(int sem_id);
 void del_semvalue(int sem_id);
 
@@ -41,15 +41,38 @@ int main() {
 		inicializarSemaforoEscritor(bufferCompartilhado);
 		inicializarSemaforoLeitor(bufferCompartilhado);
 		
-		//while(1) {
-				// verifica se está havendo escrita
-				printf("%i\n", get_semvalue(bufferCompartilhado->sem_id_writer));
-				semaphore_p(bufferCompartilhado->sem_id_writer);
-				printf("%i\n", get_semvalue(bufferCompartilhado->sem_id_writer));
-				semaphore_v(bufferCompartilhado->sem_id_writer);
-				printf("%i\n", get_semvalue(bufferCompartilhado->sem_id_writer));
+		while(1) {
 				
-		//}
+				// põe semaforo leitor ocupado
+				if(!semaphore_p(bufferCompartilhado->sem_id_reader)) exit(EXIT_FAILURE) ;
+				
+				// adiciona mais um leitor ao contador
+				bufferCompartilhado->qtdLeitores += 1;
+				
+				if (bufferCompartilhado->qtdLeitores == 1) semaphore_p(bufferCompartilhado->sem_id_writer);
+				
+				// libera semaforo de leitura
+				semaphore_v(bufferCompartilhado->sem_id_reader);
+				// lê dados
+				printf("Lido: %s\n", bufferCompartilhado->texto);
+				// ocupa leitor
+				if(!semaphore_p(bufferCompartilhado->sem_id_reader)) exit(EXIT_FAILURE) ;
+				
+				// decrementa quantidade
+				bufferCompartilhado->qtdLeitores -= 1;
+				
+				printf("Bloqueando...\n");
+				sleep(3);
+				// libera área de dados se leitores for 0
+				if (bufferCompartilhado->qtdLeitores == 0) {
+					semaphore_v(bufferCompartilhado->sem_id_writer);
+					printf("Leitor liberado\n");
+				}
+				
+				semaphore_v(bufferCompartilhado->sem_id_reader);
+				
+				sleep(rand() % 2);
+		}
 	terminarPrograma(shmid, memoriaCompartilhada, bufferCompartilhado);
 	return 0;
 }
@@ -93,15 +116,19 @@ void inicializarSemaforoEscritor(struct shared_memo *bufferCompartilhado) {
 	// cria semaforo e inicializa com 1 se já nao existir
 	if (!bufferCompartilhado->sem_id_writer) {
 		bufferCompartilhado->sem_id_writer = semget((key_t)777, 1, 0666 | IPC_CREAT);
-		set_semvalue(bufferCompartilhado->sem_id_writer);
-	}
+		set_semvalue(bufferCompartilhado->sem_id_writer, 0);
+	} 
 }
 
 void inicializarSemaforoLeitor(struct shared_memo *bufferCompartilhado) {
 	// cria semaforo e inicializa com 1 se já nao existir
 	if (!bufferCompartilhado->sem_id_reader) {
 		bufferCompartilhado->sem_id_reader = semget((key_t)888, 1, 0666 | IPC_CREAT);
-		set_semvalue(bufferCompartilhado->sem_id_reader);
+		set_semvalue(bufferCompartilhado->sem_id_reader, 0);
+		bufferCompartilhado->qtdLeitores = 0;
+	} else {
+	// se já existe semáforo de leitura, soma mais 1 ao valor do semáforo
+		// set_semvalue(bufferCompartilhado->sem_id_reader, 1);
 	}
 }
 
@@ -138,10 +165,13 @@ int semaphore_v(int sem_id)
     return(1);
 }
 
-int set_semvalue(int sem_id) {
+int set_semvalue(int sem_id, int somar) {
     union semun sem_union;
-
-    sem_union.val = 1;
+	
+	if (!somar)
+		sem_union.val = 1;
+	else
+		sem_union.val = get_semvalue(sem_id) + 1;
     if (semctl(sem_id, 0, SETVAL, sem_union) == -1) return(0);
     return(1);
 }

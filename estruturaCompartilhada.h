@@ -7,6 +7,7 @@ struct shared_memo {
 	 int sem_id_writer;
 	 // guarda id do semáforo de leitura
 	 int sem_id_reader;
-	
+	 
+	 int qtdLeitores;
 	char texto[TEXT_SZ];
 };
