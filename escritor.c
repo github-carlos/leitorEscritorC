@@ -8,6 +8,8 @@
 #include "semun.h"
 #include "estruturaCompartilhada.h"
 
+#include <sys/wait.h>
+
 // métodos para memória compartilhada
 int criarMemoriaCompartilhada();
 void *associarEspacoMemoAoProcesso(int shmid);
@@ -25,18 +27,22 @@ void del_semvalue(int sem_id);
 // utilidades
 void escreverNaMemoria(struct shared_memo* bufferCompartilhado);
 char* gerarNumeroAleatorio();
-void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado);
+void terminarPrograma(int signal);
 
 // variavel auxiliar para escrever na memoria
 char str[100];
 
-int main() {
-	// guardará o endereço do primeiro byte da memória compartilhada
-	void *memoriaCompartilhada = (void *) 0;
+// guardará o endereço do primeiro byte da memória compartilhada
+void *memoriaCompartilhada = (void *) 0;
 	
-	// serve para guardar o endereço da struct compartilhada
-	struct shared_memo *bufferCompartilhado;
-	int shmid;
+// serve para guardar o endereço da struct compartilhada
+struct shared_memo *bufferCompartilhado;
+int shmid;
+
+int main() {
+	
+	(void) signal(SIGINT, terminarPrograma); 
+	
 	shmid = criarMemoriaCompartilhada();
 	memoriaCompartilhada = associarEspacoMemoAoProcesso(shmid);
 	
@@ -46,12 +52,26 @@ int main() {
 	
 	inicializarSemaforoEscritor(bufferCompartilhado);
 	inicializarSemaforoLeitor(bufferCompartilhado);
-	
+
 	int running = 1;
 	
+	// variavel para executar codigo num fluxo só ou passo a passo
+	char passoApasso = ' ';
+	
+	printf("Executar código passo a passo? (s/n): ");
+	scanf("%c", &passoApasso);
+	getchar();
+	
 	while(running) {
-		printf("Dormindo...\n");
-		sleep(rand() % 10);
+		
+		if (passoApasso == 's') {
+			printf("Aperte Enter para ESCREVER na memória");
+			while(getchar() != '\n');
+		} else {
+			printf("Dormindo...\n");
+			sleep(rand() % 10);
+		}
+
 		
 		// vê se está bloqueado
 		if (get_semvalue(bufferCompartilhado->sem_id_writer) == 0) {
@@ -64,12 +84,16 @@ int main() {
 		// escreve na memoria
 		escreverNaMemoria(bufferCompartilhado);
 		
+		if (passoApasso == 's') {
+			printf("Aperte Enter para PARAR de escrever");
+			while( getchar() != '\n');			
+		}
+
+		
 		// libera area de dados
 		if (!semaphore_v(bufferCompartilhado->sem_id_writer)) exit(EXIT_FAILURE);
-		
 	}
 		
-	terminarPrograma(shmid, memoriaCompartilhada, bufferCompartilhado);
 	return 0;
 }
 
@@ -223,8 +247,9 @@ char* gerarNumeroAleatorio() {
  * memoriaCompartilhada é o endereço da memoriaCompartilhada
  * bufferCompartilhado é o buffer com os valores compartilhados
  * */
-void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado) {
+void terminarPrograma(int signal) {
 	del_semvalue(bufferCompartilhado->sem_id_writer);
 	del_semvalue(bufferCompartilhado->sem_id_reader);
 	deletarMemoriaCompartilhada(shmid, memoriaCompartilhada);
+	exit(0);
 }

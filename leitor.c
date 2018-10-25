@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <sys/wait.h>
+
 // biblioteca de memoria compartilhada
 #include <sys/shm.h>
 
@@ -23,13 +25,15 @@ int set_semvalue(int sem_id, int somar);
 int get_semvalue(int sem_id);
 void del_semvalue(int sem_id);
 
-void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado);
+void terminarPrograma(int signal);
 
+void *memoriaCompartilhada = (void *)0;
+struct shared_memo *bufferCompartilhado;
+int shmid;
+		
 int main() {
 		
-		void *memoriaCompartilhada = (void *)0;
-		struct shared_memo *bufferCompartilhado;
-		int shmid;
+		(void) signal(SIGINT, terminarPrograma);
 		
 		shmid = criarMemoriaCompartilhada();
 		memoriaCompartilhada = associarEspacoMemoAoProcesso(shmid);
@@ -41,18 +45,30 @@ int main() {
 		inicializarSemaforoEscritor(bufferCompartilhado);
 		inicializarSemaforoLeitor(bufferCompartilhado);
 		
+		char passoApasso = ' ';
+		printf("Executar código passo a passo? (s/n)");
+		scanf("%c", &passoApasso);
+		getchar();
 		while(1) {
+				
+				if(passoApasso == 's') {
+					printf("Aperte Enter para LER o buffer");
+					while( getchar() != '\n' );
+				}
 				
 				// põe semaforo leitor ocupado
 				if(!semaphore_p(bufferCompartilhado->sem_id_reader)) exit(EXIT_FAILURE) ;
-				
 				// adiciona mais um leitor ao contador
 				bufferCompartilhado->qtdLeitores += 1;
 				
-				if (bufferCompartilhado->qtdLeitores == 1) semaphore_p(bufferCompartilhado->sem_id_writer);
+				if (get_semvalue(bufferCompartilhado->sem_id_writer) == 0 && bufferCompartilhado->qtdLeitores == 0) {
+					printf("Esperando escritor...\n");
+				}
+				
+				if (bufferCompartilhado->qtdLeitores == 1) if(!semaphore_p(bufferCompartilhado->sem_id_writer)) exit(EXIT_FAILURE);
 				
 				// libera semaforo de leitura
-				semaphore_v(bufferCompartilhado->sem_id_reader);
+				if(!semaphore_v(bufferCompartilhado->sem_id_reader)) exit(EXIT_FAILURE);
 				// lê dados
 				printf("Lido: %s\n", bufferCompartilhado->texto);
 				// ocupa leitor
@@ -61,19 +77,25 @@ int main() {
 				// decrementa quantidade
 				bufferCompartilhado->qtdLeitores -= 1;
 				
-				printf("Bloqueando...\n");
-				sleep(3);
+				if (passoApasso != 's') {
+					printf("Bloqueando...\n");
+					sleep(3);
+				} else {
+					printf("Aperte Enter para PARAR de ler");
+					while ( getchar() != '\n' && getchar() );
+				}
+				printf("leitores %d\n", bufferCompartilhado->qtdLeitores);
 				// libera área de dados se leitores for 0
 				if (bufferCompartilhado->qtdLeitores == 0) {
-					semaphore_v(bufferCompartilhado->sem_id_writer);
-					printf("Leitor liberado\n");
+					
+					if(!semaphore_v(bufferCompartilhado->sem_id_writer)) exit(EXIT_FAILURE);
+					printf("Buffer de escrita liberado\n");
 				}
-				
-				semaphore_v(bufferCompartilhado->sem_id_reader);
-				
-				sleep(rand() % 2);
+				if(!semaphore_v(bufferCompartilhado->sem_id_reader)) exit(EXIT_FAILURE);
+				if (passoApasso != 's') {
+					sleep(rand() % 2);
+				}
 		}
-	terminarPrograma(shmid, memoriaCompartilhada, bufferCompartilhado);
 	return 0;
 }
 
@@ -190,9 +212,10 @@ void del_semvalue(int sem_id) {
         fprintf(stderr, "Failed to delete semaphore\n");
 }
 
-void terminarPrograma(int shmid, void *memoriaCompartilhada, struct shared_memo* bufferCompartilhado) {
+void terminarPrograma(int signal) {
 	del_semvalue(bufferCompartilhado->sem_id_writer);
 	del_semvalue(bufferCompartilhado->sem_id_reader);
 	deletarMemoriaCompartilhada(shmid, memoriaCompartilhada);
+	exit(0);
 }
 
