@@ -84,7 +84,7 @@ int main() {
 					printf("Aperte Enter para PARAR de ler");
 					while ( getchar() != '\n' && getchar() );
 				}
-				printf("leitores %d\n", bufferCompartilhado->qtdLeitores);
+				
 				// libera área de dados se leitores for 0
 				if (bufferCompartilhado->qtdLeitores == 0) {
 					
